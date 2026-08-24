@@ -1,0 +1,20 @@
+{
+  "model": "LogisticRegression (baseline, no imbalance handling)",
+  "threshold": 0.5,
+  "precision": 0.815712187958884,
+  "recall": 0.26881200096782,
+  "f1": 0.4043676069153776,
+  "pr_auc": 0.471149306274944,
+  "confusion_matrix": [
+    [
+      113724,
+      251
+    ],
+    [
+      3022,
+      1111
+    ]
+  ],
+  "n_train": 472432,
+  "n_holdout": 118108
+}
