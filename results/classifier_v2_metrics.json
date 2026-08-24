@@ -1,18 +1,18 @@
 {
-  "model": "LightGBM (class_weight=balanced)",
+  "model": "XGBoost (scale_pos_weight)",
   "threshold": 0.5,
-  "precision": 0.2745051085568327,
-  "recall": 0.8320832325187515,
-  "f1": 0.4128203589220335,
-  "pr_auc": 0.6900468809788434,
+  "precision": 0.3872499152255002,
+  "recall": 0.8289378175659328,
+  "f1": 0.52788906009245,
+  "pr_auc": 0.7573032000948292,
   "confusion_matrix": [
     [
-      104886,
-      9089
+      108554,
+      5421
     ],
     [
-      694,
-      3439
+      707,
+      3426
     ]
   ],
   "n_train": 472432,

@@ -7,5 +7,5 @@ ipykernel
 scikit-learn
 pyarrow
 pytest
-lightgbm
+xgboost
 shap

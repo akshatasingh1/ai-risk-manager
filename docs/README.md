@@ -17,7 +17,7 @@ _Last updated: 2026-08-24._
 | Piece | Status |
 |---|---|
 | Dataset understanding (EDA) | Done |
-| Transaction classifier | **Done and locked** — LightGBM, cost-based threshold, SHAP explainability |
+| Transaction classifier | **Done and locked** — XGBoost, cost-based threshold, SHAP explainability |
 | Identity graph | Not started |
 | Behavioral graph | Not started |
 | Hybrid scoring | Not started |
