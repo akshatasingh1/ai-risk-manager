@@ -7,3 +7,5 @@ ipykernel
 scikit-learn
 pyarrow
 pytest
+lightgbm
+shap

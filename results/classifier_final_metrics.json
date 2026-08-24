@@ -1,0 +1,48 @@
+{
+  "model": "LightGBM (class_weight=balanced), cost-optimal threshold",
+  "threshold": 0.88,
+  "precision": 0.8044895003620565,
+  "recall": 0.53762400193564,
+  "f1": 0.644525018129079,
+  "confusion_matrix": [
+    [
+      113435,
+      540
+    ],
+    [
+      1911,
+      2222
+    ]
+  ],
+  "reviews_per_fraud_caught": 0.24302430243024303,
+  "total_cost_rs": 387932.47400000005,
+  "total_cost_at_default_threshold_rs": 1023979.839,
+  "cost_assumptions": {
+    "false_negative_cost": "transaction amount (TransactionAmt)",
+    "false_positive_cost_rs": 100.0
+  },
+  "top_shap_features": {
+    "num__TransactionAmt": 0.2588063245107191,
+    "num__C13": 0.2421616634942737,
+    "num__C14": 0.18904398094772026,
+    "num__V70": 0.18206095540715303,
+    "num__card2": 0.15099580216193284,
+    "cat__ProductCD_R": 0.14785451189610682,
+    "num__card1": 0.1436354642052005,
+    "num__C1": 0.1422088522518568,
+    "cat__card6_credit": 0.12893613262583378,
+    "num__C11": 0.1139510796110721,
+    "num__D1": 0.10647057464480617,
+    "num__D4": 0.09746935902508229,
+    "num__V294": 0.09321707159160365,
+    "num__addr1": 0.0851492767249365,
+    "num__D15": 0.08092319889687173,
+    "num__V91": 0.08044613018867601,
+    "num__card5": 0.07899315442262021,
+    "num__V258": 0.07857236797721709,
+    "num__D3": 0.07769540856167877,
+    "num__V48": 0.07414667815103908
+  },
+  "n_holdout": 118108,
+  "locked": true
+}
