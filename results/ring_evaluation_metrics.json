@@ -1,0 +1,70 @@
+{
+  "population_fraud_rate": 0.03499000914417313,
+  "total_fraud": 20663,
+  "headline_min_size_2": {
+    "min_size": 2,
+    "n_clusters_flagged": 40451,
+    "n_transactions_flagged": 365980,
+    "n_fraud_captured": 15151,
+    "precision": 0.0413984370730641,
+    "lift": 1.1831502216099925,
+    "capture_rate": 0.7332429947248705
+  },
+  "sensitivity_by_min_size": [
+    {
+      "min_size": 2,
+      "n_clusters_flagged": 40451,
+      "n_transactions_flagged": 365980,
+      "n_fraud_captured": 15151,
+      "precision": 0.0413984370730641,
+      "lift": 1.1831502216099925,
+      "capture_rate": 0.7332429947248705
+    },
+    {
+      "min_size": 3,
+      "n_clusters_flagged": 17499,
+      "n_transactions_flagged": 320076,
+      "n_fraud_captured": 13374,
+      "precision": 0.04178382634124395,
+      "lift": 1.194164487613522,
+      "capture_rate": 0.6472438658471664
+    },
+    {
+      "min_size": 5,
+      "n_clusters_flagged": 6629,
+      "n_transactions_flagged": 284079,
+      "n_fraud_captured": 11960,
+      "precision": 0.04210096487244745,
+      "lift": 1.2032281757622378,
+      "capture_rate": 0.5788123699366017
+    }
+  ],
+  "edge_type_breakdown": [
+    {
+      "category": "behavioral_only",
+      "n_clusters": 18485.0,
+      "n_transactions": 45662.0,
+      "n_fraud": 2402.0,
+      "fraud_rate": 0.0526039157286146,
+      "lift_vs_population": 1.5033981703710046
+    },
+    {
+      "category": "both",
+      "n_clusters": 8854.0,
+      "n_transactions": 285483.0,
+      "n_fraud": 12053.0,
+      "fraud_rate": 0.04221967682839258,
+      "lift_vs_population": 1.206620914399601
+    },
+    {
+      "category": "identity_only",
+      "n_clusters": 13112.0,
+      "n_transactions": 34835.0,
+      "n_fraud": 696.0,
+      "fraud_rate": 0.019979905267690543,
+      "lift_vs_population": 0.5710174348730569
+    }
+  ],
+  "behavioral_only_cluster_count": 18485,
+  "false_positive_cluster_count": 36866
+}
