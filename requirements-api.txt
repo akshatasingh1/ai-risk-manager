@@ -1,0 +1,24 @@
+# Slim runtime dependencies for the FastAPI backend (src/api.py, src/serving.py)
+# only -- used by the deploy Dockerfile. Deliberately excludes what only the
+# notebooks/EDA or the Streamlit UI need (torch, torch-geometric, matplotlib,
+# seaborn, jupyter, streamlit, pyvis, requests) to keep the deployed image
+# small. See requirements.txt for the full local-dev dependency set.
+#
+# Pinned (not just named) to match the exact versions models/classifier_v3_1.joblib
+# was fitted and pickled with -- sklearn Pipeline/ColumnTransformer and XGBoost
+# booster pickles are version-sensitive; a mismatched version can fail to load
+# or, worse, load with silently different behavior.
+pandas==3.0.5
+numpy==2.4.6
+scikit-learn==1.9.0
+shap==0.51.0
+networkx==3.6.1
+pyarrow
+joblib
+fastapi
+uvicorn[standard]
+
+# xgboost is installed separately with --no-deps in the Dockerfile: its
+# Linux wheel pulls in nvidia-nccl-cu12 (~340MB) for GPU/distributed
+# training support that a CPU-only inference server never uses. XGBoost's
+# actual runtime needs (numpy, scipy) are already satisfied above/transitively.

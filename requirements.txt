@@ -10,3 +10,10 @@ pytest
 xgboost
 shap
 networkx
+torch
+torch-geometric
+fastapi
+uvicorn[standard]
+streamlit
+pyvis
+requests

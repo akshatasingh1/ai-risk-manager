@@ -1,0 +1,19 @@
+.venv/
+venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+notebooks/
+tests/
+docs/
+results/
+temp/
+app.py
+requirements.txt
+
+# Only data/processed's specific model-serving artifacts are needed (see
+# Dockerfile's explicit COPY lines) -- the raw CSVs are large and unused at
+# serving time (train_merged.parquet is already cached).
+data/raw/
