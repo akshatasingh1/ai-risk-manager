@@ -8,25 +8,35 @@ of this API -- neither touches the model, graphs, or raw dataset directly.
 Run with: uvicorn src.api:app --reload
 """
 
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
 import pandas as pd
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.audit_log import fetch_decisions, init_db, insert_decision
 from src.serving import CLASSIFIER_THRESHOLD, ScoringContext, get_cluster_alerts, get_cluster_graph, score_batch, score_one
 
+load_dotenv()
+DB_STRING = os.environ.get("DB_STRING")
+
 DEMO_SAMPLE_PATH = Path(__file__).resolve().parent.parent / "data" / "processed" / "demo_sample.parquet"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not DB_STRING:
+        raise RuntimeError(
+            "DB_STRING is not set. This API is Postgres-only (no local SQLite fallback) -- "
+            "set DB_STRING in a .env file at the repo root, e.g. DB_STRING=postgresql://user:pass@host/db"
+        )
     app.state.ctx = ScoringContext()
-    init_db()
+    init_db(db_string=DB_STRING)
     app.state.demo_sample_df = None  # loaded lazily, only if /dev/sample-transactions is used
     yield
 
@@ -226,9 +236,9 @@ def record_decision(decision: DecisionIn):
     if decision.transaction_id is None and decision.cluster_id is None:
         raise HTTPException(status_code=400, detail="one of transaction_id or cluster_id is required")
 
-    return insert_decision(**decision.model_dump())
+    return insert_decision(db_string=DB_STRING, **decision.model_dump())
 
 
 @app.get("/decisions", response_model=list[DecisionRecord])
 def list_decisions():
-    return fetch_decisions()
+    return fetch_decisions(db_string=DB_STRING)

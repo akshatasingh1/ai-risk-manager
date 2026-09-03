@@ -29,5 +29,5 @@ _Last updated: 2026-08-26._
 | Rule-based flags | **Done** — 3 causal rules (velocity/new-card/amount-spike), 1.10x-1.35x lift; catch 21.9% of the classifier's remaining misses independently |
 | FastAPI service | **Done** — `/score`, `/batch-score`, `/cluster-alerts` (+ category filter), `/cluster-alerts/{id}/graph`, `/decision`, `/decisions` |
 | Case-queue product | **Done** — Streamlit UI, plain-English SHAP-driven reasons, sensitivity dial, on-demand network view, simulated stream |
-| Audit log + weak labels | **Done** — persistent SQLite store, decisions mapped to weak labels (decline→fraud, approve→not fraud), confirmed-vs-dismissed trend |
-| Deployment | **Prepared, not shipped** — Dockerfile validated locally (1.85GB image, ~1.7GB runtime memory); parked until the product is fully built, per direction |
+| Audit log + weak labels | **Done** — Postgres-only (`src/audit_log.py`, raw SQL via psycopg2, no SQLite fallback), decisions mapped to weak labels (decline→fraud, approve→not fraud), confirmed-vs-dismissed trend |
+| Deployment | **Prepared, not shipped** — Dockerfile validated locally; runtime memory cut from 1.75GB to 440MB by replacing the live graphs with precomputed lookup tables (`src/precompute.py`); still parked until the product is fully built, per direction |

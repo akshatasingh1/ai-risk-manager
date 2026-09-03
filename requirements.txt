@@ -17,3 +17,5 @@ uvicorn[standard]
 streamlit
 pyvis
 requests
+python-dotenv
+psycopg2-binary

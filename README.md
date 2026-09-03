@@ -24,7 +24,7 @@ flowchart TD
     C --> G["Primary decision: v3.1 score >= 0.84"]
     R --> H
     G --> H[FastAPI service: src/api.py]
-    H --> I[(SQLite audit log)]
+    H --> I[(Postgres audit log)]
     H --> J[Case queue UI: Streamlit — app.py]
     J -- analyst decision --> I
     I -- weak labels --> L[Feedback: for periodic retraining]
@@ -43,7 +43,9 @@ Two processes, in separate terminals, after [Setup](#setup) below:
 .venv/Scripts/streamlit run app.py                  # frontend, http://localhost:8501
 ```
 
-Open `http://localhost:8501`: pull a sample of transactions, adjust the sensitivity dial, and resolve cases (Approve/Hold/Decline/Escalate) — each decision is recorded in `data/processed/audit_log.db` and shown in the Review History tab. The stream is simulated (replays held-out data), stated honestly rather than implied to be live — see [docs/problem-and-approach.md](docs/problem-and-approach.md).
+Open `http://localhost:8501`: pull a sample of transactions, adjust the sensitivity dial, and resolve cases (Approve/Hold/Decline/Escalate) — each decision is recorded and shown in the Review History tab. The stream is simulated (replays held-out data), stated honestly rather than implied to be live — see [docs/problem-and-approach.md](docs/problem-and-approach.md).
+
+The audit log is **Postgres-only** (no local SQLite fallback) — before running the API, create a `.env` file at the repo root with `DB_STRING=<your connection string>` (a free-tier instance from e.g. Neon or Supabase works fine). `src/api.py` picks it up automatically via `python-dotenv`, and fails fast with a clear error at startup if it's missing. Never commit `.env` (already gitignored).
 
 **Note:** the API needs `models/classifier_v3_1.joblib` and the graph artifacts under `data/processed/` to exist first — these are gitignored (not committed) and are produced by running `notebooks/03` through `notebooks/08e` in order, or by re-running just `notebooks/08e_v3_1_structural_features.ipynb` if the earlier processed artifacts are already present.
 

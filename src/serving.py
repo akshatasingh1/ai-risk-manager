@@ -11,6 +11,13 @@ partition (never seen while building the graph) falls back to the same
 neutral values a true singleton node gets: ring_category='isolated',
 zero degree, population-minimum PageRank. This keeps scoring well-defined
 for a genuinely new transaction, not just a holdout replay.
+
+Graph lookups are served from precomputed tables (src/precompute.py), not
+from the live identity/behavioral/combined graphs -- holding those three
+networkx graphs in memory measured at ~1.39GB for data that's 154MB on disk
+(networkx's per-edge Python dict overhead), for values (degree, PageRank,
+cluster membership) that never change per request. See
+docs/case-queue-and-api.md for the measured before/after.
 """
 
 import json
@@ -18,14 +25,11 @@ from collections import defaultdict
 from pathlib import Path
 
 import joblib
-import networkx as nx
 import numpy as np
 import pandas as pd
 
 from src.case_reason import build_shap_explainer, combine_case_reason, ring_phrase, top_classifier_reasons
-from src.graph import load_graph
 from src.hybrid import cluster_category, second_look_mask
-from src.ring_eval import classify_cluster_edge_types
 from src.rules import apply_all_rules
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
@@ -38,11 +42,12 @@ CLASSIFIER_THRESHOLD = 0.84
 class ScoringContext:
     """Loads every serving artifact once; reused across requests.
 
-    Graph-derived per-cluster lookups (degree, PageRank, which clusters carry
-    identity/behavioral edges) are computed here, once, rather than per
-    request -- classify_cluster_edge_types scans every edge in both graphs
-    (~1.09M total), which is fine as a one-time startup cost but far too slow
-    to repeat on every /score call.
+    `degree`/`weighted_degree`/`pagerank`/`partition`/`cluster_sizes` are
+    pandas Series (not dicts): a Series backed by a numpy array costs a few
+    MB for 590K entries, where the equivalent Python dict measured ~100MB --
+    and every place downstream that reads them (`.map()`, `.get()`,
+    `.items()`) works identically against a Series, so nothing else in this
+    module needed to change to get that saving.
     """
 
     def __init__(self, models_dir: Path = MODELS_DIR, processed_dir: Path = PROCESSED_DIR):
@@ -53,22 +58,19 @@ class ScoringContext:
         with open(models_dir / "rule_thresholds.json") as f:
             self.amount_threshold_new_card = json.load(f)["amount_threshold_new_card"]
 
-        with open(processed_dir / "cluster_partition.json") as f:
-            self.partition = {int(k): v for k, v in json.load(f).items()}
+        graph_features = pd.read_parquet(processed_dir / "transaction_graph_features.parquet").set_index("TransactionID")
+        self.partition = graph_features["cluster_id"]
+        self.degree = graph_features["graph_degree"]
+        self.weighted_degree = graph_features["graph_weighted_degree"]
+        self.pagerank = graph_features["graph_pagerank"]
+        self.min_pagerank = self.pagerank.min() if len(self.pagerank) else 0.0
 
-        self.identity_graph = load_graph(processed_dir / "identity_graph.pkl")
-        self.behavioral_graph = load_graph(processed_dir / "behavioral_graph.pkl")
-        self.combined_graph = load_graph(processed_dir / "combined_graph.pkl")
+        cluster_summary = pd.read_parquet(processed_dir / "cluster_summary.parquet").set_index("cluster_id")
+        self.cluster_sizes = cluster_summary["size"]
+        self.has_identity = cluster_summary["has_identity"].to_dict()
+        self.has_behavioral = cluster_summary["has_behavioral"].to_dict()
 
-        self.degree = dict(self.combined_graph.degree())
-        self.weighted_degree = dict(self.combined_graph.degree(weight="weight"))
-        self.pagerank = nx.pagerank(self.combined_graph, weight="weight")
-        self.min_pagerank = min(self.pagerank.values()) if self.pagerank else 0.0
-        self.cluster_sizes = pd.Series(self.partition).value_counts()
-
-        edge_types = classify_cluster_edge_types(self.partition, self.identity_graph, self.behavioral_graph)
-        self.has_identity = edge_types["has_identity"]
-        self.has_behavioral = edge_types["has_behavioral"]
+        self.cluster_edges = pd.read_parquet(processed_dir / "cluster_edges.parquet")
 
         self.expected_columns_by_kind = _expected_columns_by_kind(self.model)
         self.expected_columns = [c for cols in self.expected_columns_by_kind.values() for c in cols]
@@ -285,25 +287,14 @@ def get_cluster_graph(ctx: ScoringContext, cluster_id: int, max_nodes: int = 30)
     """
     members = ctx.cluster_members().get(cluster_id, [])
     subset = members[:max_nodes]
+    subset_set = set(subset)
 
-    identity_sub = ctx.identity_graph.subgraph(subset)
-    behavioral_sub = ctx.behavioral_graph.subgraph(subset)
-
-    edge_weights: dict[tuple, dict] = {}
-    for u, v, w in identity_sub.edges(data="weight"):
-        key = (u, v) if u < v else (v, u)
-        edge_weights.setdefault(key, {"identity": 0.0, "behavioral": 0.0})["identity"] = w
-    for u, v, w in behavioral_sub.edges(data="weight"):
-        key = (u, v) if u < v else (v, u)
-        edge_weights.setdefault(key, {"identity": 0.0, "behavioral": 0.0})["behavioral"] = w
-
-    edges = []
-    for (u, v), weights in edge_weights.items():
-        edge_type = "both" if weights["identity"] and weights["behavioral"] else ("identity" if weights["identity"] else "behavioral")
-        edges.append({
-            "source": int(u), "target": int(v), "type": edge_type,
-            "weight": float(weights["identity"] + weights["behavioral"]),
-        })
+    cluster_rows = ctx.cluster_edges[ctx.cluster_edges["cluster_id"] == cluster_id]
+    edges = [
+        {"source": int(row.source), "target": int(row.target), "type": row.edge_type, "weight": float(row.weight)}
+        for row in cluster_rows.itertuples()
+        if row.source in subset_set and row.target in subset_set
+    ]
 
     return {
         "cluster_id": cluster_id,

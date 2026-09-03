@@ -1,39 +1,53 @@
+from collections import defaultdict
+
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
 
+from src.precompute import build_cluster_edges, build_cluster_summary, build_transaction_graph_features
 from src.serving import _expected_columns_by_kind, add_graph_features, score_batch
 
 
 class _FakeContext:
-    """Stand-in for ScoringContext -- exercises add_graph_features without
-    needing the real (large, gitignored) model/graph artifacts on disk.
+    """Stand-in for ScoringContext -- exercises add_graph_features/
+    get_cluster_alerts/get_cluster_graph without needing the real (large,
+    gitignored) model/graph artifacts on disk. Built via the same
+    src.precompute functions the real ScoringContext's artifacts are
+    generated with, so this fixture matches the real attribute types
+    (pandas Series, not dicts) and structure, not just a hand-rolled lookalike.
     """
 
     def __init__(self, partition, identity_graph, behavioral_graph, combined_graph, model=None, amount_threshold_new_card=1e9):
-        from src.ring_eval import classify_cluster_edge_types
+        graph_features = build_transaction_graph_features(partition, combined_graph).set_index("TransactionID")
+        self.partition = graph_features["cluster_id"]
+        self.degree = graph_features["graph_degree"]
+        self.weighted_degree = graph_features["graph_weighted_degree"]
+        self.pagerank = graph_features["graph_pagerank"]
+        self.min_pagerank = self.pagerank.min() if len(self.pagerank) else 0.0
 
-        self.partition = partition
-        self.identity_graph = identity_graph
-        self.behavioral_graph = behavioral_graph
-        self.combined_graph = combined_graph
+        cluster_summary = build_cluster_summary(partition, identity_graph, behavioral_graph).set_index("cluster_id")
+        self.cluster_sizes = cluster_summary["size"]
+        self.has_identity = cluster_summary["has_identity"].to_dict()
+        self.has_behavioral = cluster_summary["has_behavioral"].to_dict()
 
-        self.degree = dict(combined_graph.degree())
-        self.weighted_degree = dict(combined_graph.degree(weight="weight"))
-        self.pagerank = nx.pagerank(combined_graph, weight="weight") if combined_graph.number_of_nodes() else {}
-        self.min_pagerank = min(self.pagerank.values()) if self.pagerank else 0.0
-        self.cluster_sizes = pd.Series(partition).value_counts()
-
-        edge_types = classify_cluster_edge_types(partition, identity_graph, behavioral_graph)
-        self.has_identity = edge_types["has_identity"]
-        self.has_behavioral = edge_types["has_behavioral"]
+        self.cluster_edges = build_cluster_edges(partition, identity_graph, behavioral_graph)
+        self.category_weights: dict = {}
+        self._cluster_members: dict | None = None
 
         self.model = model
         self.amount_threshold_new_card = amount_threshold_new_card
         if model is not None:
             self.expected_columns_by_kind = _expected_columns_by_kind(model)
             self.expected_columns = [c for cols in self.expected_columns_by_kind.values() for c in cols]
+
+    def cluster_members(self) -> dict:
+        if self._cluster_members is None:
+            members = defaultdict(list)
+            for node, cid in self.partition.items():
+                members[cid].append(node)
+            self._cluster_members = members
+        return self._cluster_members
 
 
 @pytest.fixture
@@ -145,3 +159,69 @@ def test_score_batch_matches_regardless_of_single_row_json_dtype_inference(ctx):
     single_result = score_batch(single_row_style, ctx)
 
     assert batch_result.iloc[0]["classifier_score"] == pytest.approx(single_result.iloc[0]["classifier_score"])
+
+
+def test_get_cluster_alerts_ranks_and_filters_by_category(ctx):
+    from src.serving import get_cluster_alerts
+
+    ctx.category_weights = {"identity_only": 0.58, "behavioral_only": 1.51}
+
+    alerts = get_cluster_alerts(ctx, min_size=2, categories=("identity_only", "behavioral_only"), limit=10)
+
+    assert {a["cluster_id"] for a in alerts} == {100, 200}  # cluster 300 is a singleton, excluded
+    # behavioral_only (weight 1.51) must outrank identity_only (weight 0.58)
+    assert alerts[0]["cluster_id"] == 200
+    assert alerts[0]["category"] == "behavioral_only"
+    assert alerts[1]["cluster_id"] == 100
+    assert alerts[1]["category"] == "identity_only"
+
+
+def test_get_cluster_alerts_respects_single_category_filter(ctx):
+    ctx.category_weights = {"identity_only": 0.58, "behavioral_only": 1.51}
+    from src.serving import get_cluster_alerts
+
+    alerts = get_cluster_alerts(ctx, min_size=2, categories=("identity_only",), limit=10)
+
+    assert [a["cluster_id"] for a in alerts] == [100]
+
+
+def test_get_cluster_graph_returns_only_edges_between_shown_members(ctx):
+    from src.serving import get_cluster_graph
+
+    result = get_cluster_graph(ctx, cluster_id=100, max_nodes=30)
+
+    assert result["cluster_id"] == 100
+    assert result["total_size"] == 3
+    assert set(result["nodes"]) == {1, 2, 3}
+    assert len(result["edges"]) == 1
+    edge = result["edges"][0]
+    assert {edge["source"], edge["target"]} == {1, 2}
+    assert edge["type"] == "identity"
+
+
+def test_get_cluster_graph_caps_shown_nodes_and_excludes_edges_outside_the_cap(ctx):
+    from src.serving import get_cluster_graph
+
+    # cluster 100 has 3 members {1,2,3} but only the edge (1,2) exists; capping
+    # to 1 node should show a single node and zero edges, not error.
+    result = get_cluster_graph(ctx, cluster_id=100, max_nodes=1)
+
+    assert result["total_size"] == 3  # true size preserved even though display is capped
+    assert len(result["nodes"]) == 1
+    assert result["edges"] == []
+
+
+def test_get_cluster_graph_unknown_cluster_returns_empty():
+    from src.serving import get_cluster_graph
+
+    partition = {1: 100, 2: 100}
+    identity_graph = nx.Graph()
+    identity_graph.add_edge(1, 2, weight=0.5)
+    behavioral_graph = nx.Graph()
+    combined_graph = nx.Graph()
+    combined_graph.add_edge(1, 2, weight=0.5)
+    ctx = _FakeContext(partition, identity_graph, behavioral_graph, combined_graph)
+
+    result = get_cluster_graph(ctx, cluster_id=999)
+    assert result["nodes"] == []
+    assert result["edges"] == []

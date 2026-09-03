@@ -51,7 +51,13 @@ Separately, solo-fraud cases (`isolated` + `flag`) are genuinely rare — only 1
 
 ## Persistent audit log + weak labels (`src/audit_log.py`)
 
-Day 9's in-memory `/decision` store didn't survive an API restart. Replaced with a SQLite-backed one (plain `sqlite3`, no new dependency — the whole "database" is one file, `data/processed/audit_log.db`, gitignored like every other artifact). Verified by killing and restarting the API mid-session: all recorded decisions were still there afterward.
+Day 9's in-memory `/decision` store didn't survive an API restart. Replaced with a **Postgres-only** store (`src/audit_log.py`) — raw SQL via `psycopg2`, no ORM, and deliberately no local SQLite fallback (an earlier version had one; removed per direction, to avoid two code paths to maintain and keep local dev/testing honest about what production actually runs).
+
+`db_string` is a required, explicit parameter on every function in `audit_log.py` — never read from the environment inside that module. `src/api.py` is the only place that reads `DB_STRING` (via `python-dotenv` loading `.env`, gitignored) and passes it through; if it's missing, the API fails loudly at startup with a clear error rather than misbehaving later. This keeps `audit_log.py` a pure, fully-testable unit with no import-time or call-time environment side effects.
+
+Verified for real, not just by inspection: killed and restarted the API mid-session against the live Neon Postgres instance from `.env` — the recorded decision survived. Confirmed the fail-fast path separately by patching `DB_STRING` to `None` and calling the startup routine directly. The test suite (`tests/test_audit_log.py`) hits the real configured database directly for every DB-touching test (skipped automatically when `DB_STRING` isn't set, e.g. a fresh clone without credentials), using clearly-sentinel negative transaction IDs and a cleanup fixture that deletes them afterward even if an assertion fails — confirmed zero leftover rows in the live table after every run.
+
+This also closes the deployment-persistence gap flagged earlier: a bare SQLite file on a container's local disk doesn't survive a redeploy unless a persistent volume is attached. Postgres removes that dependency on the compute container's own disk entirely — the audit log lives in a separately-hosted, genuinely persistent database regardless of what happens to the API container.
 
 Each decision also becomes a weak label — the raw material a future retraining pass would use:
 
@@ -66,12 +72,31 @@ The review-history tab shows these as counts and a cumulative confirmed-vs-dismi
 
 ## Deployment: prepared, not shipped
 
-A `Dockerfile` + slim `requirements-api.txt` were built and validated locally (image builds, container runs, every route works). Two real findings from that work:
+A `Dockerfile` + slim `requirements-api.txt` were built and validated locally (image builds, container runs, every route works). Findings from that work:
 
 - XGBoost's Linux wheel pulls in `nvidia-nccl-cu12` (~340MB) for GPU/distributed training a CPU-only inference server never uses — stripped via `pip install --no-deps`, cutting the image from 2.82GB to 1.85GB.
-- The backend's baseline memory footprint is **~1.7GB idle** — the three in-memory networkx graphs (~1.09M edges) plus several parallel per-transaction dicts (degree, weighted-degree, PageRank, cluster partition) for all 590K transactions. A first cut of the demo-sample endpoint made this worse (4.2GB, from loading the entire merged dataset for a demo that only needs a couple thousand rows) — fixed with a pre-generated 2,000-row sample file.
+- The backend's baseline memory footprint was measured at **~1.7GB idle** — the three in-memory networkx graphs (`identity_graph`, `behavioral_graph`, `combined_graph`, ~1.09M edges) plus several parallel per-transaction dicts (degree, weighted-degree, PageRank, cluster partition) for all 590K transactions. This alone ruled out every free hosting tier. A first cut of the demo-sample endpoint made it worse still (4.2GB, from loading the entire merged dataset for a demo that only needs a couple thousand rows) — fixed with the pre-generated 2,000-row `demo_sample.parquet`.
 
-Net result: this doesn't fit Render's free tier (512MB) or Fly.io's smallest free machines. Deployment is deliberately parked until the product is fully built, per direction — nothing has been pushed anywhere or cost anything.
+### Fixed: precomputed lookup tables replace the live graphs (`src/precompute.py`)
+
+Everything the serving layer ever reads from the graphs is static per transaction — degree, weighted degree, PageRank, cluster membership, which clusters carry identity/behavioral edges. None of it changes per request, so there was never a reason to pay networkx's per-edge Python dict overhead just to look these values up. Measured breakdown of where the old 1.75GB actually went (loading each `ScoringContext` component in sequence, RSS delta per step):
+
+| Component | On disk | RAM added | Expansion |
+|---|---|---|---|
+| `identity_graph` | 64 MB | 603 MB | 9.4x |
+| `behavioral_graph` | 28 MB | 161 MB | 5.8x |
+| `combined_graph` (~1.09M edges) | 62 MB | 624 MB | 10x |
+| `cluster_partition` dict (590K entries) | 11 MB | 98 MB | 9x |
+
+The three graphs alone were 80% of total memory, each expanding 6–10x between its packed pickle size and its live in-memory form — an intrinsic cost of networkx representing a graph as nested Python dictionaries (a small dict per edge, just to hold `{"weight": 0.2}`), not a bug in this project's specific usage.
+
+Fix: three functions in `src/precompute.py` (`build_transaction_graph_features`, `build_cluster_summary`, `build_cluster_edges`) run once, offline, against the full graphs, and produce three small flat parquet files (~20MB total, replacing ~246MB of pickles/JSON) that `ScoringContext` loads instead — as pandas Series/DataFrames, not Python dicts, since a Series backed by a numpy array costs a few MB for 590K entries where the equivalent dict cost ~100MB. Because `.map()`, `.get()`, and `.items()` all work identically against a Series, none of the consuming code (`add_graph_features`, `get_cluster_alerts`) needed to change — only `get_cluster_graph` (the network-view endpoint) needed a real rewrite, to read intra-cluster edges from the new `cluster_edges` table instead of calling `.subgraph()` on a live graph object.
+
+**Result, measured the same way as the original 1.75GB figure:** `ScoringContext` now loads in **440MB** (down from 1,746MB) and starts in **3.2s** (down from ~8–10s). Confirmed independently via the OS process metrics, and correctness re-verified against known reference values from before the change (exact score match for a known transaction, identical ring-alert ranking, identical network-graph output for a known cluster) — this was a memory optimization, not a behavior change.
+
+One assumption caught and corrected along the way: `build_cluster_edges` initially assumed every combined-graph edge stays within its own Louvain cluster. Measured directly: **108,864 of 1,073,904 edges (10.1%) cross cluster boundaries** — expected, since Louvain optimizes global modularity, not a zero-cut partition, not a bug. These are correctly excluded from the per-cluster edge table, for the same reason the original `graph.subgraph(cluster_members)` call implicitly excluded them too.
+
+**Still not shipped anywhere** — 440MB plausibly fits Render's 512MB free tier, but that's a thin margin once FastAPI/uvicorn's own overhead and real request-handling memory are added, and hasn't been tested end-to-end in an actual free-tier container. The persistent-storage question is separately resolved now (see the audit-log section above — a free-tier Neon Postgres instance, not the container's own disk), so the remaining open question for deployment is purely compute hosting, not data durability. Deployment remains deliberately parked until the product is fully built, per direction — nothing has been pushed to a live host, and only genuinely free-tier services have been used.
 
 ## What's next
 

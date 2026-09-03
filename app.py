@@ -313,7 +313,7 @@ WEAK_LABEL_TEXT = {1: "🔴 Confirmed fraud", 0: "🟢 Dismissed (false positive
 with tab_history:
     st.subheader("Review history")
     st.caption(
-        "Persisted in SQLite (`data/processed/audit_log.db`) -- survives an API restart, unlike Day 9's "
+        "Persisted in Postgres -- survives an API restart, unlike Day 9's "
         "in-memory store. Each decision doubles as a weak label: Decline -> confirmed fraud, "
         "Approve -> dismissed as a false positive, Hold/Escalate -> no verdict yet (see src/audit_log.py)."
     )

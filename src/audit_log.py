@@ -1,59 +1,66 @@
 """Persistent audit log + weak-label capture -- Day 11.
 
-Replaces Day 9's in-memory `/decision` store with a SQLite-backed one, so an
-analyst's decisions survive an API restart (see docs/problem-and-approach.md,
-Section 2a: "a review history view ... so the tool visibly earns trust over
-time"). Every decision also gets translated into a weak label -- the raw
-material a future retraining cycle would use, not just an audit trail.
+Postgres only, raw SQL via psycopg2 -- no ORM, no local SQLite fallback.
+`db_string` is a required, explicit parameter on every function (never read
+from the environment inside this module): src/api.py is the only place that
+reads `DB_STRING` (from `.env` via python-dotenv) and passes it through, so
+this module stays a pure, fully-testable unit with no import-time or
+call-time environment side effects.
 
-Weak-label mapping (a real judgment call, confirmed with the user, not
-derivable from the code alone):
+Every decision also gets translated into a weak label -- the raw material a
+future retraining cycle would use, not just an audit trail. Weak-label
+mapping (a real judgment call, confirmed with the user, not derivable from
+the code alone):
   - decline  -> 1 (analyst agrees this is fraud)
   - approve  -> 0 (analyst overrides the flag; this is a false positive)
   - escalate -> None (not a verdict -- passed to someone else)
   - hold     -> None (not a verdict -- deferred)
-
-Uses the plain `sqlite3` standard-library module -- no new dependency, and a
-new connection per call (SQLite handles many short-lived connections fine at
-this scale) rather than one long-lived shared connection, so there's no
-cross-thread/cross-request locking to reason about.
 """
 
-import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "processed" / "audit_log.db"
+import psycopg2
 
 WEAK_LABEL_BY_ACTION = {"decline": 1, "approve": 0}
+
+_COLUMNS = [
+    "id", "transaction_id", "cluster_id", "action", "analyst", "note",
+    "weak_label", "context_score", "context_category", "context_reason", "recorded_at",
+]
+
+_DDL = """
+    CREATE TABLE IF NOT EXISTS decisions (
+        id SERIAL PRIMARY KEY,
+        transaction_id BIGINT,
+        cluster_id BIGINT,
+        action TEXT NOT NULL,
+        analyst TEXT,
+        note TEXT,
+        weak_label INTEGER,
+        context_score DOUBLE PRECISION,
+        context_category TEXT,
+        context_reason TEXT,
+        recorded_at TEXT NOT NULL
+    )
+"""
 
 
 def weak_label_for_action(action: str) -> int | None:
     return WEAK_LABEL_BY_ACTION.get(action)
 
 
-def init_db(db_path: Path = DB_PATH) -> None:
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS decisions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                transaction_id INTEGER,
-                cluster_id INTEGER,
-                action TEXT NOT NULL,
-                analyst TEXT,
-                note TEXT,
-                weak_label INTEGER,
-                context_score REAL,
-                context_category TEXT,
-                context_reason TEXT,
-                recorded_at TEXT NOT NULL
-            )
-        """)
+def init_db(db_string: str) -> None:
+    conn = psycopg2.connect(db_string)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(_DDL)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def insert_decision(
-    db_path: Path = DB_PATH,
+    db_string: str,
     *,
     transaction_id: int | None = None,
     cluster_id: int | None = None,
@@ -69,19 +76,24 @@ def insert_decision(
     """
     weak_label = weak_label_for_action(action)
     recorded_at = datetime.now(timezone.utc).isoformat()
+    values = (transaction_id, cluster_id, action, analyst, note,
+              weak_label, context_score, context_category, context_reason, recorded_at)
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO decisions (
-                transaction_id, cluster_id, action, analyst, note,
-                weak_label, context_score, context_category, context_reason, recorded_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (transaction_id, cluster_id, action, analyst, note,
-             weak_label, context_score, context_category, context_reason, recorded_at),
-        )
-        row_id = cursor.lastrowid
+    sql = """
+        INSERT INTO decisions (
+            transaction_id, cluster_id, action, analyst, note,
+            weak_label, context_score, context_category, context_reason, recorded_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+    """
+    conn = psycopg2.connect(db_string)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, values)
+            row_id = cur.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
 
     return {
         "id": row_id,
@@ -98,9 +110,13 @@ def insert_decision(
     }
 
 
-def fetch_decisions(db_path: Path = DB_PATH) -> list[dict]:
+def fetch_decisions(db_string: str) -> list[dict]:
     """All recorded decisions, oldest first."""
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT * FROM decisions ORDER BY id ASC").fetchall()
-    return [dict(row) for row in rows]
+    conn = psycopg2.connect(db_string)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM decisions ORDER BY id ASC")
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    return [dict(zip(_COLUMNS, row)) for row in rows]

@@ -12,11 +12,20 @@ pandas==3.0.5
 numpy==2.4.6
 scikit-learn==1.9.0
 shap==0.51.0
-networkx==3.6.1
 pyarrow
 joblib
 fastapi
 uvicorn[standard]
+python-dotenv
+psycopg2-binary
+
+# networkx: serving.py itself no longer touches graph objects directly (see
+# src/precompute.py -- those run offline, not in the deployed container),
+# but it's still a transitive import (serving.py -> src.hybrid ->
+# src.ring_eval, both of which import networkx at module level even though
+# the specific functions serving.py calls don't use it), so it must stay
+# installed for those imports to succeed.
+networkx==3.6.1
 
 # xgboost is installed separately with --no-deps in the Dockerfile: its
 # Linux wheel pulls in nvidia-nccl-cu12 (~340MB) for GPU/distributed
