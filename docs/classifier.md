@@ -74,6 +74,8 @@ This is also a real, honest trade-off, not a free lunch: recall drops from 82.9%
 
 This becomes the basis for the case queue's plain-English reason (e.g. *"flagged mainly due to a high number of linked identities and an unusual transaction amount"*) instead of showing an analyst a raw probability score.
 
+**[UPDATE, Day 8]**: this classifier's own results (above) remain the official "locked" record for signal 1 in isolation. After Days 5-8 built the graph signals and tried six ways of combining them (see [Hybrid Merge](hybrid-merge.md)), the version actually shipped as the **primary production classifier is v3.1** — this same classifier plus graph degree/PageRank/cluster-category features, costing ₹330,948 on the same holdout (vs. ₹337,421 here). The numbers on this page are kept as-is since they're the genuine, standalone signal-1 result; v3.1's full reasoning and comparison against five other attempts lives in `docs/hybrid-merge.md`.
+
 ## What's next
 
 - Signal 1 (this classifier) is done. Next: the identity graph (Day 5) and behavioral-similarity graph (Day 6) — signals 2 and 3 — followed by combining all three into one hybrid score (Day 8)

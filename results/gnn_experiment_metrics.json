@@ -1,0 +1,21 @@
+{
+  "naive": {
+    "pr_auc": 0.3893,
+    "threshold": 0.94,
+    "cost_rs": 579357
+  },
+  "tuned": {
+    "pr_auc": 0.6359030810358596,
+    "threshold": 0.9500000000000001,
+    "cost_rs": 429606.532,
+    "best_val_pr_auc": 0.5871726159992819,
+    "epochs_trained": 250,
+    "config": {
+      "lr": 0.003,
+      "weight_decay": 0.0005,
+      "hidden_dim": 128,
+      "dropout": 0.4
+    }
+  },
+  "xgboost_locked_cost_rs": 337421.007
+}

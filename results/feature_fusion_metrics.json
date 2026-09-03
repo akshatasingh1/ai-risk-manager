@@ -1,0 +1,29 @@
+{
+  "model": "XGBoost v3 (feature-fusion: ring_category + ring_cluster_size added as features)",
+  "threshold": 0.87,
+  "precision": 0.8350345735923609,
+  "recall": 0.6135978707960319,
+  "f1": 0.707391910739191,
+  "pr_auc": 0.7565839726636749,
+  "confusion_matrix": [
+    [
+      113474,
+      501
+    ],
+    [
+      1597,
+      2536
+    ]
+  ],
+  "total_cost_rs": 333872.181,
+  "v2_locked_cost_rs": 337421.007,
+  "difference_rs": 3548.826000000001,
+  "ring_feature_importances": {
+    "cat__ring_category_identity_only": 0.0010599964298307896,
+    "cat__ring_category_behavioral_only": 0.0009522230247966945,
+    "num__ring_cluster_size": 0.0008163108141161501,
+    "cat__ring_category_both": 0.0006499764858745039,
+    "cat__ring_category_isolated": 0.0
+  },
+  "ring_feature_count_in_top_10": 0
+}

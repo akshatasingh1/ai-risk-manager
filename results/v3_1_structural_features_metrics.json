@@ -1,0 +1,33 @@
+{
+  "model": "XGBoost v3.1 (ring_category + degree + weighted_degree + PageRank)",
+  "threshold": 0.8400000000000001,
+  "precision": 0.7971145175834085,
+  "recall": 0.6416646503750303,
+  "f1": 0.7109919571045576,
+  "pr_auc": 0.7547022622578193,
+  "confusion_matrix": [
+    [
+      113300,
+      675
+    ],
+    [
+      1481,
+      2652
+    ]
+  ],
+  "total_cost_rs": 330947.86100000003,
+  "v2_locked_cost_rs": 337421.007,
+  "v3_flat_label_cost_rs": 333872.181,
+  "difference_vs_v2_rs": 6473.14599999995,
+  "difference_vs_v3_rs": 2924.319999999949,
+  "graph_feature_importances": {
+    "cat__ring_category_both": 0.001015124493278563,
+    "num__graph_weighted_degree": 0.0009713014005683362,
+    "cat__ring_category_behavioral_only": 0.0009426997858099639,
+    "num__ring_cluster_size": 0.0007231152849271894,
+    "cat__ring_category_identity_only": 0.0006660989602096379,
+    "num__graph_degree": 0.0006646725232712924,
+    "num__graph_pagerank": 0.0006318905507214367,
+    "cat__ring_category_isolated": 0.0
+  }
+}

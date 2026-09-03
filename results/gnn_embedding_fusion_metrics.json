@@ -1,0 +1,26 @@
+{
+  "model": "XGBoost v5 (128-dim GNN embedding fusion)",
+  "threshold": 0.9,
+  "precision": 0.8020354563361786,
+  "recall": 0.5910960561335592,
+  "f1": 0.6805961833124391,
+  "pr_auc": 0.7081409314812157,
+  "confusion_matrix": [
+    [
+      113372,
+      603
+    ],
+    [
+      1690,
+      2443
+    ]
+  ],
+  "total_cost_rs": 374902.597,
+  "v2_locked_cost_rs": 337421.007,
+  "v3_flat_label_cost_rs": 333872.181,
+  "difference_vs_v2_rs": -37481.590000000026,
+  "difference_vs_v3_rs": -41030.41600000003,
+  "embedding_importance_sum": 0.5870823860168457,
+  "embedding_dims_in_top_20": 15,
+  "best_embedding_dim_rank": 1
+}

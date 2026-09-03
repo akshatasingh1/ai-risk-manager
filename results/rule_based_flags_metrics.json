@@ -1,0 +1,37 @@
+{
+  "population_fraud_rate": 0.03499000914417313,
+  "amount_threshold_new_card": 275.99,
+  "rule_summary": [
+    {
+      "rule": "rule_high_velocity",
+      "n_triggered": 87176,
+      "fraud_rate": 0.03838212352023493,
+      "lift_vs_population": 1.0969452269099131,
+      "capture_rate": 0.1619319556695543
+    },
+    {
+      "rule": "rule_new_card_high_value",
+      "n_triggered": 1460,
+      "fraud_rate": 0.04589041095890411,
+      "lift_vs_population": 1.3115289787383844,
+      "capture_rate": 0.003242510768039491
+    },
+    {
+      "rule": "rule_amount_spike",
+      "n_triggered": 30670,
+      "fraud_rate": 0.047081838930551026,
+      "lift_vs_population": 1.3455794977519047,
+      "capture_rate": 0.06988336640371678
+    },
+    {
+      "rule": "any_rule_triggered",
+      "n_triggered": 114457,
+      "fraud_rate": 0.04060913705583756,
+      "lift_vs_population": 1.1605923533346714,
+      "capture_rate": 0.22494313507235156
+    }
+  ],
+  "classifier_v31_holdout_misses": 1481,
+  "caught_by_any_rule": 324,
+  "caught_by_any_rule_pct_of_misses": 0.2187711006076975
+}
